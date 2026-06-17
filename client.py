@@ -2,10 +2,14 @@ import socket
 import threading
 import json
 
-ip = "127.0.0.1"
-port = 4444
-s = socket.socket()
-s.connect((ip,port))
+try:
+    ip = input("Enter IP address:")
+    port = 4444
+    s = socket.socket()
+    s.connect((ip,port))
+except Exception as e:
+    print("Connection error:",e)
+    exit()
 def listen():
     while True:
         try:
