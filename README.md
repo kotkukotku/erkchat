@@ -3,6 +3,7 @@
 This project is a chat program built using Python's socket library.
 
 I had no commercial motives while undertaking this project. I did it purely as a hobby and for personal use.
+Also I code it because my purpose is learning socket programming.
 
 ## Features
 
@@ -20,6 +21,12 @@ Usage: /msg {USERNAME} {MESSAGE}
 > /users: It lists online users.
 
 > exit: It disconnects the user from the server.
+
+> /nick: It changes your username.
+
+Usage: /nick {NEW-USERNAME}
+
+> /help: It shows all commands.
 
 ### 5. It runs from the terminal (for now).
 
@@ -42,6 +49,6 @@ python server.py
 python client.py
 ```
 ## Note
-This project is still under development.
+This project is still under development. I make it for learning.
 ## Contributing
 If you would like to contribute to the project, you can reach me at https://github.com/kotkukotku

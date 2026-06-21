@@ -14,16 +14,28 @@ def listen():
     while True:
         try:
             cevap = s.recv(1024).decode(errors="ignore").strip()
-        except:
+            try:
+                data = json.loads(cevap)
+            except:
+                print(cevap)
+                continue
+        except ConnectionResetError:
             print("Bağlantı koptu.")
             break
-        if not cevap:
+        if not data:
             print("Sunucuyla bağlantı koptu.")
             break
-        if cevap == "exit":
-            print("Server kapatıldı.")
-            break
-        print(cevap)
+        if data["type"] == "system":
+            if data["event"] == "shutdown":
+                print(data.get("text"))
+                break
+            else:
+                print(data.get("text"))
+        if data["type"] == "dm":
+            print(data.get("text"))
+        if data["type"] == "chat":
+            print(data.get("text"))
+        
 threading.Thread(target=listen,daemon=True).start()
 nickname = input("Kullanıcı adı girin: ")
 s.sendall(nickname.encode())
@@ -41,6 +53,16 @@ while True:
             "type":"command",
             "name": "users"
         }
+    elif msg.startswith("/nick "):
+        parts = msg.split(" ",1)
+        if len(parts) < 2:
+            print("Kullanım: /nick (Yeni Kullanıcı Adı)")
+            continue
+        data = {
+            "type":"nick",
+            "new_name":parts[1]
+        }
+
     elif msg.startswith("/msg "):
         parts = msg.split(" ",2)
         if len(parts) < 3:
@@ -53,6 +75,13 @@ while True:
             "to":to,
             "text":text
         }
+    elif msg == "/help":
+        data = {
+            "type":"command",
+            "name":"help"
+        }
+        s.sendall(json.dumps(data).encode())
+        continue
     else:
         data = {
             "type": "msg",
