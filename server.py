@@ -1,8 +1,12 @@
+#server.py
+
 import socket
 import threading
 import collections
 import json
+from datetime import datetime 
 
+lock = threading.Lock()
 
 ip = "0.0.0.0"
 port = 4444
@@ -18,9 +22,13 @@ s.listen()
 def send_json(conn, data):
     conn.sendall((json.dumps(data) + "\n").encode())
 
-
+def get_nickname(conn):
+    with lock:
+        return nicknames.get(conn, "Unknown")
 def broadcast(new_msg, sender_client):
-    for client in clients.copy():
+    with lock:
+        current_clients = clients.copy()
+    for client in current_clients:
         if sender_client != client:
             try:
                 send_json(client, new_msg)
@@ -29,11 +37,16 @@ def broadcast(new_msg, sender_client):
 
 
 def reseting(conn):
+    with lock:
+        try:
+            clients.remove(conn)
+        except Exception as e:
+            print("Hata oluştu: ", e)
+        nicknames.pop(conn, None)
     try:
-        clients.remove(conn)
+        conn.close()
     except:
         pass
-    nicknames.pop(conn, None)
 
 
 def receive(conn, addr):
@@ -43,23 +56,26 @@ def receive(conn, addr):
         nickname = f.readline().strip()
         if not nickname:
             raise Exception("Kullanıcı adı belirtilmedi.")
-        if nickname in nicknames.values():
+        with lock:
+            name_exists = nickname in nicknames.values()
+            if not name_exists:
+                nicknames[conn] = nickname
+                current_nick = nickname
+        if name_exists:
             send_json(conn,{
                 "type":"system",
                 "event":"shutdown",
                 "text":"Bu kullanıcı adı zaten var."
             })
-            conn.close()
             reseting(conn)
             return
-        print(nickname, "bağlandı.")
-        nicknames[conn] = nickname
+        print(current_nick, "bağlandı.")
+
         broadcast({
             "type": "system",
-            "text": f"{nicknames[conn]} bağlandı.",
+            "text": f"{current_nick} bağlandı.",
         }, conn)
     except:
-        conn.close()
         reseting(conn)
         return
 
@@ -68,7 +84,9 @@ def receive(conn, addr):
             "type": "system",
             "text": "--GEÇMİŞ MESAJLAR--\n",
         })
-        for old_msg in message_log:
+        with lock:
+            logs = list(message_log)
+        for old_msg in logs:
             send_json(conn, old_msg)
         send_json(conn, {
             "type": "system",
@@ -78,7 +96,7 @@ def receive(conn, addr):
     while True:
         raw = f.readline()
         if not raw:
-            nickname = nicknames.get(conn)
+            nickname = get_nickname(conn)
             reseting(conn)
             if nickname:
                 broadcast({
@@ -98,17 +116,21 @@ def receive(conn, addr):
 
         if data.get("type") == "msg":
             text = data["text"]
-
+            with lock:
+                sender = nicknames[conn]
+            current_time = datetime.now().strftime("%H:%M")
             new_msg = {
                 "type": "chat",
-                "text": f"{nicknames[conn]}: {text}",
+                "text": f"[{current_time}] {sender}: {text}",
             }
-            message_log.append(new_msg)
+            with lock:
+                message_log.append(new_msg)
             broadcast(new_msg, conn)
+            send_json(conn,new_msg)
             continue
 
         if data.get("type") == "exit":
-            nickname = nicknames.get(conn)
+            nickname = get_nickname(conn)
             broadcast({
                 "type": "system",
                 "text": f"{nickname} ayrıldı.",
@@ -116,49 +138,52 @@ def receive(conn, addr):
             shut_msg = {
                 "type": "system",
                 "event": "shutdown",
-                "text": "Server kapatıldı.",
+                "text": "Başarıyla çıkış yapıldı.",
             }
             send_json(conn, shut_msg)
             reseting(conn)
-            conn.close()
             break
 
         if data.get("type") == "command" and data.get("name") == "users":
-            user_list = "\n".join(nicknames.values())
+            with lock:
+                user_list = "\n".join(nicknames.values())
             users_msg = {
                 "type": "system",
-                "text": f"Online users:\n{user_list}",
+                "text": f"Online users:\n{user_list}\n",
             }
             send_json(conn, users_msg)
             continue
 
         if data.get("type") == "nick":
             old_nickname = nicknames.get(conn)
-            new_user = data["new_name"].strip()
+            new_user = data.get("new_name","").strip()
+            with lock:
+                nick_taken = new_user in nicknames.values()
             if not new_user:
                 send_json(conn, {
                     "type": "system",
-                    "text": "Kullanıcı ismi boş olamaz.",
+                    "text": "Kullanıcı ismi boş olamaz.\n",
+                })
+                continue
+            if nick_taken:
+                send_json(conn, {
+                    "type":"system",
+                    "text": "Bu kullanıcı adı zaten var.\n"
                 })
                 continue
             elif old_nickname == new_user:
                 send_json(conn, {
                     "type": "system",
-                    "text": "Lütfen farklı bir kullanıcı adı girin.",
-                })
-                continue
-            elif new_user in nicknames.values():
-                send_json(conn, {
-                    "type":"system",
-                    "text": "Bu kullanıcı adı zaten var."
+                    "text": "Lütfen farklı bir kullanıcı adı girin.\n",
                 })
                 continue
             else:
-                nicknames[conn] = new_user
+                with lock:
+                    nicknames[conn] = new_user
                 new_msg = f"{old_nickname} ismini {new_user} olarak değiştirdi."
                 send_json(conn, {
                     "type": "system",
-                    "text": "İsminiz değiştirildi.",
+                    "text": "İsminiz değiştirildi.\n",
                 })
                 broadcast({
                     "type": "system",
@@ -167,11 +192,11 @@ def receive(conn, addr):
                 continue
         if data.get("type") == "command" and data.get("name") == "help":
             help_text = (
-                "Komutlar:\n"
+                "\nKomutlar:\n"
                 "/users: Online kullanıcılar\n"
                 "/nick (isim): İsim değiştirir\n"
                 "/msg (user) (mesaj): DM'den mesaj atar\n"
-                "exit: Çıkış"
+                "exit: Çıkış\n"
             )
             send_json(conn, {
                 "type": "system",
@@ -181,19 +206,26 @@ def receive(conn, addr):
 
         if data.get("type") == "dm":
             target_name = data.get("to")
-            text = data.get("text")
+            text = data.get("text","")
 
             target_conn = None
-            for c, name in nicknames.items():
+            with lock:
+                users = list(nicknames.items())
+            for c, name in users:
                 if name == target_name:
                     target_conn = c
                     break
             if target_conn:
-                sender = nicknames[conn]
+                sender = get_nickname(conn)
                 sender_msg = {
                     "type": "dm",
-                    "text": f"(DM) {sender}: {text}",
+                    "text": f"\n(DM) {sender}: {text}",
                 }
+                my_msg = {
+                    "type":"dm",
+                    "text":f"(DM -> {target_name}): {text}"
+                }
+                send_json(conn,my_msg)
                 send_json(target_conn, sender_msg)
             else:
                 send_json(conn, {
@@ -208,7 +240,8 @@ try:
     while True:
         try:
             conn, addr = s.accept()
-            clients.append(conn)
+            with lock:
+                clients.append(conn)
             threading.Thread(target=receive, args=(conn, addr), daemon=True).start()
         except OSError:
             break
@@ -216,15 +249,17 @@ except KeyboardInterrupt:
     print("\nCtrl+C algılandı. Server kapatılıyor.")
 finally:
     print("Bağlantılar sonlandırılıyor...")
-    for client in clients.copy():
+    with lock:
+        current_clients = clients.copy()
+    for client in current_clients:
         try:
             send_json(client, {
                 "type": "system",
                 "event": "shutdown",
                 "text": "Server kapatıldı.",
             })
-            client.close()
-        except:
-            pass
+            reseting(client)
+        except Exception as e:
+            print("Hata oluştu:", e)
     s.close()
     print("Server güvenli şekilde kapatıldı.")

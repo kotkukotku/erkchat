@@ -1,11 +1,20 @@
+#client.py
+
 import socket
 import threading
 import json
+from colorama import Fore, init, Style
+import os
+init(autoreset=True)
 
-running = True
+running = threading.Event()
+running.set()
 
 def send_json(sock, data):
-    sock.sendall((json.dumps(data) + "\n").encode())
+    try:
+        sock.sendall((json.dumps(data) + "\n").encode())
+    except:
+        pass
 
 
 try:
@@ -14,12 +23,11 @@ try:
     s = socket.socket()
     s.connect((ip, port))
 except Exception as e:
-    print("Connection error:", e)
+    print(Fore.RED + "Connection error:", e)
     exit()
 
 
 def listen():
-    global running
     f = s.makefile("r", encoding="utf-8", errors="ignore")
 
     for line in f:
@@ -34,23 +42,25 @@ def listen():
             continue
 
         if data.get("type") == "system":
-            print(data.get("text"))
+            print(Fore.YELLOW + data.get("text"))
             if data.get("event") == "shutdown":
-                running = False
+                running.clear()
+                os._exit(0)
                 return
         elif data.get("type") == "dm":
-            print(data.get("text"))
+            print(Fore.MAGENTA + data.get("text"))
         elif data.get("type") == "chat":
-            print(data.get("text"))
+            print(Fore.GREEN + data.get("text"))
 
     print("Sunucuyla bağlantı koptu.")
-
+    running.clear()
+    os._exit(0)
 
 threading.Thread(target=listen, daemon=True).start()
 nickname = input("Kullanıcı adı girin: ")
 s.sendall((nickname + "\n").encode())
 
-while running:
+while running.is_set():
     msg = input()
 
     if msg == "exit":
@@ -67,7 +77,7 @@ while running:
     elif msg.startswith("/nick "):
         parts = msg.split(" ", 1)
         if len(parts) < 2:
-            print("Kullanım: /nick (Yeni Kullanıcı Adı)")
+            print("Kullanım: /nick (Yeni Kullanıcı Adı)\n")
             continue
         data = {
             "type": "nick",
@@ -77,7 +87,7 @@ while running:
     elif msg.startswith("/msg "):
         parts = msg.split(" ", 2)
         if len(parts) < 3:
-            print("Kullanım: /msg (Kullanıcı Adı) (Mesaj)")
+            print("Kullanım: /msg (Kullanıcı Adı) (Mesaj)\n")
             continue
         to = parts[1]
         text = parts[2]
