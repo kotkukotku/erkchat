@@ -27,8 +27,9 @@ Usage: /msg {USERNAME} {MESSAGE}
 Usage: /nick {NEW-USERNAME}
 
 > /help: It shows all commands.
+### 5. It has a SQLite database. You can register and login.
 
-### 5. It runs from the terminal (for now).
+### 6. It runs from the terminal (for now).
 
 ## Setup
 To run the project on your own device, follow these steps:

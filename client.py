@@ -27,9 +27,7 @@ except Exception as e:
     exit()
 
 
-def listen():
-    f = s.makefile("r", encoding="utf-8", errors="ignore")
-
+def listen(f):
     for line in f:
         line = line.strip()
         if not line:
@@ -55,14 +53,71 @@ def listen():
     print("Sunucuyla bağlantı koptu.")
     running.clear()
     os._exit(0)
+authenticated = False
 
-threading.Thread(target=listen, daemon=True).start()
-nickname = input("Kullanıcı adı girin: ")
-s.sendall((nickname + "\n").encode())
+f = s.makefile("r", encoding="utf-8", errors="ignore")
+while not authenticated:
+    print("""
+1 - Giriş yap
+2 - Kayıt ol
+""")
+
+    choice = input("Seçim: ").strip()
+
+
+
+    if choice not in ["1","2"]:
+        print(Fore.RED + "Geçersiz seçim. Lütfen tekrar deneyin")
+        continue
+    username = input("Kullanıcı adı: ").strip()
+    password = input("Şifre: ").strip()
+    if not username or not password:
+        print(Fore.RED + "Kullanıcı adı veya şifre boş bırakılamaz.")
+        continue
+    if choice == "1":
+        action = "login"
+    if choice == "2":
+        action = "register"
+
+    send_json(s, {
+        "type": "auth",
+        "action": action,
+        "username": username,
+        "password": password
+    })
+
+    response_line = f.readline()
+    if not response_line:
+        print(Fore.RED + "Sunucuyla bağlantı kesildi.")
+        os._exit(0)
+    
+    try:
+        response = json.loads(response_line.strip())
+    except json.JSONDecodeError:
+        print(Fore.RED + "Sunucudan anlaşılmayan yanıt alındı.")
+        continue
+    
+    if response.get("type") == "auth_response":
+        success = response.get("success", False)
+        message = response.get("message","")
+        if success:
+            print(Fore.GREEN + message)
+            if action == "login":
+                authenticated = True
+        else:
+            print(Fore.RED + message)
+
+threading.Thread(target=listen, args=(f,),daemon=True).start()
+
 
 while running.is_set():
-    msg = input()
+    try:
+        msg = input().strip()
+    except KeyboardInterrupt:
+        break
 
+    if not msg:
+        continue
     if msg == "exit":
         data = {
             "type": "exit",

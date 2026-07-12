@@ -4,15 +4,17 @@ import socket
 import threading
 import collections
 import json
-from datetime import datetime 
+import database
+import hashlib
+from datetime import datetime
 
 lock = threading.Lock()
+database.init_db()
 
 ip = "0.0.0.0"
 port = 4444
 clients = []
 nicknames = {}
-message_log = collections.deque(maxlen=10)
 s = socket.socket()
 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind((ip, port))
@@ -52,47 +54,76 @@ def reseting(conn):
 def receive(conn, addr):
     f = conn.makefile("r", encoding="utf-8", errors="ignore")
 
-    try:
-        nickname = f.readline().strip()
-        if not nickname:
-            raise Exception("Kullanıcı adı belirtilmedi.")
-        with lock:
-            name_exists = nickname in nicknames.values()
-            if not name_exists:
-                nicknames[conn] = nickname
-                current_nick = nickname
-        if name_exists:
-            send_json(conn,{
-                "type":"system",
-                "event":"shutdown",
-                "text":"Bu kullanıcı adı zaten var."
-            })
+    auth_success = False
+    current_nick = ""
+    user_role = "user"
+
+    while not auth_success:
+        raw = f.readline()
+        if not raw:
             reseting(conn)
             return
-        print(current_nick, "bağlandı.")
+        try:
+            data = json.loads(raw.strip())
+        except json.JSONDecodeError:
+            continue
+        
+        if data.get("type") == "auth":
+            action = data.get("action")
+            username = data.get("username","").strip()
+            raw_password = data.get("password","").strip()
+            if not username or not raw_password:
+                send_json(conn, {"type": "auth_response",
+                "success":False,
+                "message": "Kullanıcı adı veya şifre boş olamaz."})
+                continue
+            password_hash = hashlib.sha256(raw_password.encode()).hexdigest()
+            if action == "register":
+                if database.register(username, password_hash):
+                    send_json(conn, {"type": "auth_response",
+                    "success":True,
+                    "message": "Kayıt başarılı! Şimdi giriş yapın."})
+                else:
+                    send_json(conn, {"type": "auth_response",
+                    "success":False,
+                    "message": "Hata: Kullanıcı adı zaten alınmış."})
+            elif action == "login":
+                rol = database.login(username, password_hash)
+                if rol:
+                    with lock:
+                        if username in nicknames.values():
+                            send_json(conn,{"type": "auth_response",
+                            "success":False,
+                            "message": "Bu hesap şu an zaten aktif!"})
+                            continue
+                        nicknames[conn] = username
+                        current_nick = username
+                        user_role = rol
+                        auth_success = True
+                    send_json(conn, {"type": "auth_response",
+                    "success":True,
+                    "message": f"Giriş Başarılı! Rolünüz: {user_role}"})
+                    broadcast({"type": "system", "text": f"{current_nick} bağlandı."}, conn)
+                else:
+                    send_json(conn, {"type": "auth_response",
+                    "success":False,
+                    "message": "Hatalı kullanıcı adı veya şifre!"})
 
-        broadcast({
-            "type": "system",
-            "text": f"{current_nick} bağlandı.",
-        }, conn)
-    except:
-        reseting(conn)
-        return
-
-    if message_log:
+    old_messages = database.get_last_messages()
+    if old_messages:
         send_json(conn, {
-            "type": "system",
-            "text": "--GEÇMİŞ MESAJLAR--\n",
+            "type":"system",
+            "text":"--GEÇMİŞ MESAJLAR--\n"
         })
-        with lock:
-            logs = list(message_log)
-        for old_msg in logs:
-            send_json(conn, old_msg)
+        for sender, message, receiver, time in old_messages:
+            send_json(conn, {
+                "type":"chat",
+                "text":f"[{time}] {sender}: {message}"
+            })
         send_json(conn, {
-            "type": "system",
-            "text": "-----------------------",
+        "type": "system",
+        "text": "-----------------------",
         })
-
     while True:
         raw = f.readline()
         if not raw:
@@ -117,14 +148,17 @@ def receive(conn, addr):
         if data.get("type") == "msg":
             text = data["text"]
             with lock:
-                sender = nicknames[conn]
+                sender = nicknames.get(conn, "Unknown")
             current_time = datetime.now().strftime("%H:%M")
             new_msg = {
                 "type": "chat",
                 "text": f"[{current_time}] {sender}: {text}",
             }
-            with lock:
-                message_log.append(new_msg)
+            database.add_message(
+                sender,
+                text,
+                None
+            )
             broadcast(new_msg, conn)
             send_json(conn,new_msg)
             continue
@@ -168,7 +202,7 @@ def receive(conn, addr):
             if nick_taken:
                 send_json(conn, {
                     "type":"system",
-                    "text": "Bu kullanıcı adı zaten var.\n"
+                    "text": "Bu kullanıcı adı şu an aktif birinde zaten var.\n"
                 })
                 continue
             elif old_nickname == new_user:
@@ -178,17 +212,22 @@ def receive(conn, addr):
                 })
                 continue
             else:
-                with lock:
-                    nicknames[conn] = new_user
-                new_msg = f"{old_nickname} ismini {new_user} olarak değiştirdi."
-                send_json(conn, {
-                    "type": "system",
-                    "text": "İsminiz değiştirildi.\n",
-                })
-                broadcast({
-                    "type": "system",
-                    "text": new_msg,
-                }, conn)
+                if database.update_username(old_nickname, new_user):
+                    with lock:
+                        nicknames[conn] = new_user
+                    new_msg = f"{old_nickname} ismini {new_user} olarak değiştirdi."
+                    send_json(conn, {
+                        "type": "system",
+                        "text": "İsminiz değiştirildi.\n",
+                    })
+                    broadcast({
+                        "type": "system",
+                        "text": new_msg,
+                    }, conn)
+                    continue
+                else:
+                    send_json(conn,{"type":"system",
+                    "text":"Bu kullanıcı adı veritabanında kayıtlı.\n"})
                 continue
         if data.get("type") == "command" and data.get("name") == "help":
             help_text = (
