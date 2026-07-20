@@ -2,12 +2,11 @@
 
 import socket
 import threading
-import collections
 import json
-from datetime import datetime
 
 import database
 import auth
+import messages
 from protocol import send_json
 
 lock = threading.Lock()
@@ -144,21 +143,13 @@ def receive(conn, addr):
             continue
 
         if data.get("type") == "msg":
-            text = data["text"]
-            with lock:
-                sender = nicknames.get(conn, "Unknown")
-            current_time = datetime.now().strftime("%H:%M")
-            new_msg = {
-                "type": "chat",
-                "text": f"[{current_time}] {sender}: {text}",
-            }
-            database.add_message(
-                sender,
-                text,
-                None
+            messages.handle_message(
+                conn,
+                data["text"],
+                nicknames,
+                lock,
+                broadcast
             )
-            broadcast(new_msg, conn)
-            send_json(conn,new_msg)
             continue
 
         if data.get("type") == "exit":
