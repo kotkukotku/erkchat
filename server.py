@@ -7,6 +7,7 @@ import json
 import database
 import auth
 import messages
+import commands
 from protocol import send_json
 
 lock = threading.Lock()
@@ -51,60 +52,17 @@ def reseting(conn):
 
 def receive(conn, addr):
     f = conn.makefile("r", encoding="utf-8", errors="ignore")
+    current_nick, user_role = auth.handle_client_auth(
+        conn,
+        f,
+        nicknames,
+        lock,
+        broadcast
+    )
 
-    auth_success = False
-    current_nick = ""
-    user_role = "user"
-
-    while not auth_success:
-        raw = f.readline()
-        if not raw:
-            reseting(conn)
-            return
-        try:
-            data = json.loads(raw.strip())
-        except json.JSONDecodeError:
-            continue
-        
-        if data.get("type") == "auth":
-            action = data.get("action")
-            username = data.get("username","").strip()
-            raw_password = data.get("password","").strip()
-            if not username or not raw_password:
-                send_json(conn, {"type": "auth_response",
-                "success":False,
-                "message": "Kullanıcı adı veya şifre boş olamaz."})
-                continue
-            if action == "register":
-                if auth.register(username, raw_password):
-                    send_json(conn, {"type": "auth_response",
-                    "success":True,
-                    "message": "Kayıt başarılı! Şimdi giriş yapın."})
-                else:
-                    send_json(conn, {"type": "auth_response",
-                    "success":False,
-                    "message": "Hata: Kullanıcı adı zaten alınmış."})
-            elif action == "login":
-                rol = auth.login(username, raw_password)
-                if rol:
-                    with lock:
-                        if username in nicknames.values():
-                            send_json(conn,{"type": "auth_response",
-                            "success":False,
-                            "message": "Bu hesap şu an zaten aktif!"})
-                            continue
-                        nicknames[conn] = username
-                        current_nick = username
-                        user_role = rol
-                        auth_success = True
-                    send_json(conn, {"type": "auth_response",
-                    "success":True,
-                    "message": f"Giriş Başarılı! Rolünüz: {user_role}"})
-                    broadcast({"type": "system", "text": f"{current_nick} bağlandı."}, conn)
-                else:
-                    send_json(conn, {"type": "auth_response",
-                    "success":False,
-                    "message": "Hatalı kullanıcı adı veya şifre!"})
+    if current_nick is None:
+        reseting(conn)
+        return
 
     old_messages = database.get_last_messages()
     if old_messages:
@@ -168,98 +126,30 @@ def receive(conn, addr):
             break
 
         if data.get("type") == "command" and data.get("name") == "users":
-            with lock:
-                user_list = "\n".join(nicknames.values())
-            users_msg = {
-                "type": "system",
-                "text": f"Online users:\n{user_list}\n",
-            }
-            send_json(conn, users_msg)
+            commands.handle_users(conn,nicknames,lock)
             continue
 
         if data.get("type") == "nick":
-            old_nickname = nicknames.get(conn)
-            new_user = data.get("new_name","").strip()
-            with lock:
-                nick_taken = new_user in nicknames.values()
-            if not new_user:
-                send_json(conn, {
-                    "type": "system",
-                    "text": "Kullanıcı ismi boş olamaz.\n",
-                })
-                continue
-            if nick_taken:
-                send_json(conn, {
-                    "type":"system",
-                    "text": "Bu kullanıcı adı şu an aktif birinde zaten var.\n"
-                })
-                continue
-            elif old_nickname == new_user:
-                send_json(conn, {
-                    "type": "system",
-                    "text": "Lütfen farklı bir kullanıcı adı girin.\n",
-                })
-                continue
-            else:
-                if database.update_username(old_nickname, new_user):
-                    with lock:
-                        nicknames[conn] = new_user
-                    new_msg = f"{old_nickname} ismini {new_user} olarak değiştirdi."
-                    send_json(conn, {
-                        "type": "system",
-                        "text": "İsminiz değiştirildi.\n",
-                    })
-                    broadcast({
-                        "type": "system",
-                        "text": new_msg,
-                    }, conn)
-                    continue
-                else:
-                    send_json(conn,{"type":"system",
-                    "text":"Bu kullanıcı adı veritabanında kayıtlı.\n"})
-                continue
+            commands.handle_nick(
+                conn,
+                data.get("new_name",""),
+                nicknames,
+                lock,
+                broadcast)    
+            continue
         if data.get("type") == "command" and data.get("name") == "help":
-            help_text = (
-                "\nKomutlar:\n"
-                "/users: Online kullanıcılar\n"
-                "/nick (isim): İsim değiştirir\n"
-                "/msg (user) (mesaj): DM'den mesaj atar\n"
-                "exit: Çıkış\n"
-            )
-            send_json(conn, {
-                "type": "system",
-                "text": help_text,
-            })
+            commands.handle_help(conn)
             continue
 
         if data.get("type") == "dm":
-            target_name = data.get("to")
-            text = data.get("text","")
-
-            target_conn = None
-            with lock:
-                users = list(nicknames.items())
-            for c, name in users:
-                if name == target_name:
-                    target_conn = c
-                    break
-            if target_conn:
-                sender = get_nickname(conn)
-                sender_msg = {
-                    "type": "dm",
-                    "text": f"\n(DM) {sender}: {text}",
-                }
-                my_msg = {
-                    "type":"dm",
-                    "text":f"(DM -> {target_name}): {text}"
-                }
-                send_json(conn,my_msg)
-                send_json(target_conn, sender_msg)
-            else:
-                send_json(conn, {
-                    "type": "system",
-                    "text": "Kullanıcı bulunamadı.",
-                })
+            messages.handle_dm(
+                conn,
+                data.get("to"),
+                data.get("text",""),
+                nicknames,
+                lock,
+                get_nickname
+            )
             continue
 
 
