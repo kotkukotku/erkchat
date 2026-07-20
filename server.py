@@ -4,9 +4,11 @@ import socket
 import threading
 import collections
 import json
-import database
-import hashlib
 from datetime import datetime
+
+import database
+import auth
+from protocol import send_json
 
 lock = threading.Lock()
 database.init_db()
@@ -20,9 +22,6 @@ s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 s.bind((ip, port))
 s.listen()
 
-
-def send_json(conn, data):
-    conn.sendall((json.dumps(data) + "\n").encode())
 
 def get_nickname(conn):
     with lock:
@@ -77,9 +76,8 @@ def receive(conn, addr):
                 "success":False,
                 "message": "Kullanıcı adı veya şifre boş olamaz."})
                 continue
-            password_hash = hashlib.sha256(raw_password.encode()).hexdigest()
             if action == "register":
-                if database.register(username, password_hash):
+                if auth.register(username, raw_password):
                     send_json(conn, {"type": "auth_response",
                     "success":True,
                     "message": "Kayıt başarılı! Şimdi giriş yapın."})
@@ -88,7 +86,7 @@ def receive(conn, addr):
                     "success":False,
                     "message": "Hata: Kullanıcı adı zaten alınmış."})
             elif action == "login":
-                rol = database.login(username, password_hash)
+                rol = auth.login(username, raw_password)
                 if rol:
                     with lock:
                         if username in nicknames.values():
