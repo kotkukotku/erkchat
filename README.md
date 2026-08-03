@@ -1,6 +1,6 @@
-# Python Socket Chat Programme
+# ErkChat Programme
 
-This project is a chat program built using Python's socket library.
+ErkChat is a chat program built using Python's socket library.
 
 I had no commercial motives while undertaking this project. I did it purely as a hobby and for personal use.
 Also I code it because my purpose is learning socket programming.
