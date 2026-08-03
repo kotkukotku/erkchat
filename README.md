@@ -1,3 +1,4 @@
+![Project Logo](assets/logo.png)
 # ErkChat Programme
 
 ErkChat is a chat program built using Python's socket library.
