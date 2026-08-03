@@ -79,7 +79,7 @@ def handle_client_auth(conn, f, nicknames, lock, broadcast):
             send_json(conn, {
                 "type": "auth_response",
                 "success": True,
-                "message": f"Giriş Başarılı! Rolünüz: {role}"
+                "message": f"Giriş Başarılı!"
             })
 
 
