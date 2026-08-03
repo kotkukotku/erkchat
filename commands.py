@@ -56,9 +56,16 @@ def handle_help(conn):
         "/users: Online kullanıcılar\n"
         "/nick (isim): İsim değiştirir\n"
         "/msg (user) (mesaj): DM'den mesaj atar\n"
+        "/whoami: Kullanıcı adı ve rolü gösterir."
         "exit: Çıkış\n"
     )
     send_json(conn, {
         "type": "system",
         "text": help_text,
+    })
+def handle_whoami(conn,nicknames,role):
+    text = f"Kullanıcı adı:{nicknames.get(conn,"Unknown")}\nRol:{role}\n"
+    send_json(conn, {
+        "type": "system",
+        "text": text
     })

@@ -140,7 +140,9 @@ def receive(conn, addr):
         if data.get("type") == "command" and data.get("name") == "help":
             commands.handle_help(conn)
             continue
-
+        if data.get("type") == "command" and data.get("name") == "whoami":
+            commands.handle_whoami(conn,nicknames,user_role)
+            continue
         if data.get("type") == "dm":
             messages.handle_dm(
                 conn,

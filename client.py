@@ -158,6 +158,13 @@ while running.is_set():
         }
         send_json(s, data)
         continue
+    elif msg == "/whoami":
+        data = {
+        "type": "command",
+        "name": "whoami",
+        }
+        send_json(s,data)
+        continue
     else:
         data = {
             "type": "msg",
