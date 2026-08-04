@@ -140,6 +140,12 @@ def receive(conn, addr):
         if data.get("type") == "command" and data.get("name") == "help":
             commands.handle_help(conn)
             continue
+        if data.get("type") == "command" and data.get("name") == "ping":
+            send_json(conn,{
+                "type": "ping_response",
+                "time": data.get("time")
+            })
+            continue
         if data.get("type") == "command" and data.get("name") == "whoami":
             commands.handle_whoami(conn,nicknames,user_role)
             continue

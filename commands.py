@@ -57,6 +57,7 @@ def handle_help(conn):
         "/nick (isim): İsim değiştirir\n"
         "/msg (user) (mesaj): DM'den mesaj atar\n"
         "/whoami: Kullanıcı adı ve rolü gösterir.\n"
+        "/ping: Sunucuya ping atıp gecikmeyi ölçer.\n"
         "exit: Çıkış\n"
     )
     send_json(conn, {

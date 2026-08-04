@@ -29,6 +29,7 @@ Usage: /nick {NEW-USERNAME}
 
 > /help: It shows all commands.
 > /whoami: It shows your username and role.
+> /ping: It pings to the server and measures latency.
 ### 5. It has a SQLite database. You can register and login.
 
 ### 6. It runs from the terminal (for now).

@@ -5,6 +5,7 @@ import threading
 import json
 from colorama import Fore, init, Style
 import os
+import time
 init(autoreset=True)
 
 running = threading.Event()
@@ -49,6 +50,11 @@ def listen(f):
             print(Fore.MAGENTA + data.get("text"))
         elif data.get("type") == "chat":
             print(Fore.GREEN + data.get("text"))
+        elif data.get("type") == "ping_response":
+            start = time.perf_counter()
+            latency = (start - data.get("time")) * 1000
+            print(Fore.CYAN + f"Gecikme: {latency:.2f} ms\n")
+
 
     print("Sunucuyla bağlantı koptu.")
     running.clear()
@@ -157,6 +163,14 @@ while running.is_set():
             "name": "help",
         }
         send_json(s, data)
+        continue
+    elif msg == "/ping":
+        data = {
+            "type":"command",
+            "name":"ping",
+            "time": time.perf_counter()
+        }
+        send_json(s,data)
         continue
     elif msg == "/whoami":
         data = {
