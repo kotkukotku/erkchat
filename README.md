@@ -29,10 +29,20 @@ Usage: /nick {NEW-USERNAME}
 
 > /help: It shows all commands.
 
+> /rooms: It shows all rooms.
+
+> /room: It shows your current room.
+
+> /join: It joins another room.
+
+Usage: /join {NEW-ROOM}
+
 > /whoami: It shows your username and role.
 
 > /ping: It pings to the server and measures latency.
-### 5. It has a SQLite database. You can register and login.
+### 4. It has a SQLite database. You can register and login.
+
+### 5. It has a room system. You can join a new room and chat to it.
 
 ### 6. It runs from the terminal (for now).
 
