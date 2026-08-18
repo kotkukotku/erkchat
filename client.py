@@ -135,6 +135,31 @@ while running.is_set():
             "type": "command",
             "name": "users",
         }
+    elif msg == "/rooms":
+        data = {
+            "type": "command",
+            "name": "rooms",
+        }
+    elif msg.startswith("/join "):
+        parts = msg.split(" ", 1)
+        if len(parts) < 2 or not parts[1].strip():
+            print("Kullanım: /join (Oda Adı)\n")
+            continue
+        data = {
+            "type": "command",
+            "name": "join",
+            "room": parts[1].strip(),
+        }
+    elif msg == "/room":
+        data = {
+            "type": "command",
+            "name": "room",
+        }
+    elif msg == "/leave":
+        data = {
+            "type": "command",
+            "name": "leave",
+        }
     elif msg.startswith("/nick "):
         parts = msg.split(" ", 1)
         if len(parts) < 2:

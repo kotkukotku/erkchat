@@ -2,8 +2,10 @@
 
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
-db_name = "chat.db"
+db_name = Path(__file__).with_name("chat.db")
+DEFAULT_ROOM = "lobby"
 
 def get_connection():
     return sqlite3.connect(db_name)
@@ -21,6 +23,13 @@ def init_db():
 )
 """)
     imlec.execute("""
+    CREATE TABLE IF NOT EXISTS odalar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL
+)
+""")
+    imlec.execute("""
     CREATE TABLE IF NOT EXISTS kullanicilar (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -28,6 +37,18 @@ def init_db():
         rol TEXT NOT NULL DEFAULT 'user'            
 )
 """)
+    imlec.execute(
+        "INSERT OR IGNORE INTO odalar (name, created_at) VALUES (?, ?)",
+        (DEFAULT_ROOM, datetime.now().strftime("%H:%M"))
+    )
+
+    imlec.execute("PRAGMA table_info(mesajlar)")
+    columns = [row[1] for row in imlec.fetchall()]
+    if "room" not in columns:
+        imlec.execute(
+            "ALTER TABLE mesajlar ADD COLUMN room TEXT NOT NULL DEFAULT 'lobby'"
+        )
+
     conn.commit()
     conn.close()
 def register(username,password_hash):
@@ -57,13 +78,35 @@ def login(username, password_hash):
     if sonuc:
         return sonuc[0]
     return None
-def add_message(gonderen, mesaj, alici=None):
+def add_room(room_name):
     conn = get_connection()
     imlec = conn.cursor()
     saat = datetime.now().strftime("%H:%M")
 
-    sorgu = "INSERT INTO mesajlar (gonderen,mesaj,alici,saat) VALUES (?,?,?,?)"
-    veriler = (gonderen,mesaj,alici,saat)
+    imlec.execute(
+        "INSERT OR IGNORE INTO odalar (name, created_at) VALUES (?, ?)",
+        (room_name, saat)
+    )
+
+    conn.commit()
+    conn.close()
+
+def get_room_names():
+    conn = get_connection()
+    imlec = conn.cursor()
+    imlec.execute("SELECT name FROM odalar ORDER BY name")
+    room_names = [row[0] for row in imlec.fetchall()]
+    conn.close()
+    return room_names
+
+def add_message(gonderen, mesaj, alici=None, room=DEFAULT_ROOM):
+    conn = get_connection()
+    imlec = conn.cursor()
+    saat = datetime.now().strftime("%H:%M")
+
+    add_room(room)
+    sorgu = "INSERT INTO mesajlar (gonderen,mesaj,alici,saat,room) VALUES (?,?,?,?,?)"
+    veriler = (gonderen,mesaj,alici,saat,room)
     imlec.execute(sorgu,veriler)
     
     conn.commit()
@@ -86,11 +129,20 @@ def update_username(old_username,new_username):
     except sqlite3.IntegrityError:
         conn.close()
         return False
-def get_last_messages(limit=15):
+def get_last_messages(limit=15, room=None):
     conn = get_connection()
     imlec = conn.cursor()
 
-    imlec.execute("SELECT gonderen,mesaj,alici,saat FROM mesajlar ORDER BY id DESC LIMIT ?", (limit,))
+    if room is None:
+        imlec.execute(
+            "SELECT gonderen,mesaj,alici,saat,room FROM mesajlar ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+    else:
+        imlec.execute(
+            "SELECT gonderen,mesaj,alici,saat,room FROM mesajlar WHERE room = ? ORDER BY id DESC LIMIT ?",
+            (room,limit)
+        )
     data = imlec.fetchall()
     conn.close()
 

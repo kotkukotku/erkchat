@@ -83,12 +83,6 @@ def handle_client_auth(conn, f, nicknames, lock, broadcast):
             })
 
 
-            broadcast({
-                "type": "system",
-                "text": f"{username} bağlandı."
-            }, conn)
-
-
             return username, role
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
