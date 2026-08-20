@@ -6,17 +6,11 @@ import json
 from colorama import Fore, init, Style
 import os
 import time
+from protocol import send_json
 init(autoreset=True)
 
 running = threading.Event()
 running.set()
-
-def send_json(sock, data):
-    try:
-        sock.sendall((json.dumps(data) + "\n").encode())
-    except:
-        pass
-
 
 try:
     ip = input("Enter IP address:")

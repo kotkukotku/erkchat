@@ -17,6 +17,7 @@ ip = "0.0.0.0"
 port = 4444
 clients = []
 nicknames = {}
+user_ids = {}
 rooms = {room_name: set() for room_name in database.get_room_names()}
 client_rooms = {}
 s = socket.socket()
@@ -66,7 +67,7 @@ def reseting(conn):
             rooms[room_name].discard(conn)
 
         nicknames.pop(conn, None)
-
+        user_ids.pop(conn, None)
     try:
         conn.close()
     except:
@@ -75,7 +76,7 @@ def reseting(conn):
 
 def receive(conn, addr):
     f = conn.makefile("r", encoding="utf-8", errors="ignore")
-    current_nick, user_role = auth.handle_client_auth(
+    current_nick, user_id, user_role = auth.handle_client_auth(
         conn,
         f,
         nicknames,
@@ -88,6 +89,7 @@ def receive(conn, addr):
         return
     with lock:
         clients.append(conn)
+        user_ids[conn] = user_id
 
         default_room = "lobby"
         rooms.setdefault(default_room, set()).add(conn)
@@ -140,6 +142,7 @@ def receive(conn, addr):
                 conn,
                 data["text"],
                 nicknames,
+                user_ids,
                 lock,
                 broadcast_room,
                 room_name
@@ -222,6 +225,7 @@ def receive(conn, addr):
                 data.get("to"),
                 data.get("text",""),
                 nicknames,
+                user_ids,
                 lock,
                 get_nickname
             )

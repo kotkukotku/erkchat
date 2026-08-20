@@ -16,10 +16,11 @@ def init_db():
     imlec.execute("""
     CREATE TABLE IF NOT EXISTS mesajlar (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        gonderen TEXT NOT NULL,
+        sender_id INTEGER NOT NULL,
+        receiver_id INTEGER,
         mesaj TEXT NOT NULL,
-        alici TEXT,
-        saat TEXT NOT NULL                 
+        saat TEXT NOT NULL,
+        room TEXT
 )
 """)
     imlec.execute("""
@@ -34,6 +35,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
         rol TEXT NOT NULL DEFAULT 'user'            
 )
 """)
@@ -41,22 +43,21 @@ def init_db():
         "INSERT OR IGNORE INTO odalar (name, created_at) VALUES (?, ?)",
         (DEFAULT_ROOM, datetime.now().strftime("%H:%M"))
     )
-
     imlec.execute("PRAGMA table_info(mesajlar)")
-    columns = [row[1] for row in imlec.fetchall()]
-    if "room" not in columns:
+    message_columns = [row[1] for row in imlec.fetchall()]
+    if "room" not in message_columns:
         imlec.execute(
-            "ALTER TABLE mesajlar ADD COLUMN room TEXT NOT NULL DEFAULT 'lobby'"
+            "ALTER TABLE mesajlar ADD COLUMN room TEXT DEFAULT 'lobby'"
         )
 
     conn.commit()
     conn.close()
-def register(username,password_hash):
+def register(username,password_hash, salt):
     conn = get_connection()
     imlec = conn.cursor()
     try:
-        sorgu = "INSERT INTO kullanicilar (username, password_hash) VALUES (?,?)"
-        veriler = (username,password_hash)
+        sorgu = "INSERT INTO kullanicilar (username, password_hash, salt) VALUES (?,?,?)"
+        veriler = (username,password_hash, salt)
         imlec.execute(sorgu,veriler)
         
         conn.commit()
@@ -69,14 +70,25 @@ def register(username,password_hash):
 def login(username, password_hash):
     conn = get_connection()
     imlec = conn.cursor()
-    sorgu = "SELECT rol from kullanicilar WHERE username = ? AND password_hash = ?"
+    sorgu = "SELECT id, rol FROM kullanicilar WHERE username = ? AND password_hash = ?"
     veriler = (username,password_hash)
-    
     imlec.execute(sorgu,veriler)
     sonuc = imlec.fetchone()
     conn.close()
     if sonuc:
-        return sonuc[0]
+        return sonuc[0], sonuc[1]
+    return None
+def get_user_credentials(username):
+    conn = get_connection()
+    imlec = conn.cursor()
+    sorgu = "SELECT password_hash, salt FROM kullanicilar WHERE username = ?"
+    veriler = (username,)
+
+    imlec.execute(sorgu,veriler)
+    sonuc = imlec.fetchone()
+    conn.close()
+    if sonuc:
+        return sonuc[0], sonuc[1]
     return None
 def add_room(room_name):
     conn = get_connection()
@@ -99,16 +111,24 @@ def get_room_names():
     conn.close()
     return room_names
 
-def add_message(gonderen, mesaj, alici=None, room=DEFAULT_ROOM):
+def add_message(sender_id, mesaj, receiver_id=None, room=DEFAULT_ROOM):
     conn = get_connection()
     imlec = conn.cursor()
     saat = datetime.now().strftime("%H:%M")
 
-    add_room(room)
-    sorgu = "INSERT INTO mesajlar (gonderen,mesaj,alici,saat,room) VALUES (?,?,?,?,?)"
-    veriler = (gonderen,mesaj,alici,saat,room)
-    imlec.execute(sorgu,veriler)
-    
+    if room:
+        add_room(room)
+
+    sorgu = """
+        INSERT INTO mesajlar
+        (sender_id, receiver_id, mesaj, saat, room)
+        VALUES (?, ?, ?, ?, ?)
+    """
+
+    veriler = (sender_id, receiver_id, mesaj, saat, room)
+
+    imlec.execute(sorgu, veriler)
+
     conn.commit()
     conn.close()
 def update_username(old_username,new_username):
@@ -120,9 +140,6 @@ def update_username(old_username,new_username):
         if imlec.rowcount == 0:
             conn.close()
             return False
-        imlec.execute("UPDATE mesajlar SET gonderen = ? WHERE gonderen = ?",(new_username,old_username))
-        imlec.execute("UPDATE mesajlar SET alici = ? WHERE alici = ?", (new_username, old_username))
-
         conn.commit()
         conn.close()
         return True
@@ -135,13 +152,13 @@ def get_last_messages(limit=15, room=None):
 
     if room is None:
         imlec.execute(
-            "SELECT gonderen,mesaj,alici,saat,room FROM mesajlar ORDER BY id DESC LIMIT ?",
+            "SELECT k.username, m.mesaj, m.receiver_id, m.saat, m.room FROM mesajlar m JOIN kullanicilar k ON m.sender_id = k.id ORDER BY m.id DESC LIMIT ?",
             (limit,)
         )
     else:
         imlec.execute(
-            "SELECT gonderen,mesaj,alici,saat,room FROM mesajlar WHERE room = ? ORDER BY id DESC LIMIT ?",
-            (room,limit)
+            "SELECT k.username, m.mesaj, m.receiver_id, m.saat, m.room FROM mesajlar m JOIN kullanicilar k ON m.sender_id = k.id WHERE m.room = ? ORDER BY m.id DESC LIMIT ?",
+            (room, limit)
         )
     data = imlec.fetchall()
     conn.close()

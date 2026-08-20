@@ -3,6 +3,7 @@
 import hashlib
 import database
 import json
+import secrets
 from protocol import send_json
 
 def handle_client_auth(conn, f, nicknames, lock, broadcast):
@@ -10,7 +11,7 @@ def handle_client_auth(conn, f, nicknames, lock, broadcast):
         raw = f.readline()
 
         if not raw:
-            return None, None
+            return None, None, None
 
         try:
             data = json.loads(raw.strip())
@@ -51,9 +52,9 @@ def handle_client_auth(conn, f, nicknames, lock, broadcast):
             continue
         elif action == "login":
 
-            role = login(username, password)
+            user_id, role = login(username, password)
 
-            if not role:
+            if not user_id:
                 send_json(conn, {
                     "type": "auth_response",
                     "success": False,
@@ -83,14 +84,22 @@ def handle_client_auth(conn, f, nicknames, lock, broadcast):
             })
 
 
-            return username, role
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+            return username, user_id, role
+def hash_password(password,salt):
+    return hashlib.scrypt(password.encode("utf-8"),salt=salt, n=16384,r=8,p=1).hex()
 
 def register(username, password):
-    password_hash = hash_password(password)
-    return database.register(username,password_hash)
+    salt = secrets.token_bytes(16)
+    password_hash = hash_password(password,salt)
+    return database.register(username,password_hash, salt.hex())
 
-def login(username,password):
-    password_hash = hash_password(password)
-    return database.login(username,password_hash)
+def login(username, password):
+    creds = database.get_user_credentials(username)
+    if not creds:
+        return None, None
+    stored_hash, salt = creds
+    password_hash = hash_password(password, bytes.fromhex(salt))
+    res = database.login(username, password_hash)
+    if not res:
+        return None, None
+    return res

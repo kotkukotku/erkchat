@@ -40,21 +40,21 @@ Usage: /join {NEW-ROOM}
 > /whoami: It shows your username and role.
 
 > /ping: It pings to the server and measures latency.
-### 4. It has a SQLite database. You can register and login.
+### 5. It has a SQLite database. You can register and login.
 
-### 5. It has a room system. You can join a new room and chat to it.
+### 6. It has a room system. You can join a new room and chat to it.
 
-### 6. It runs from the terminal (for now).
+### 7. It runs from the terminal (for now).
 
 ## Setup
 To run the project on your own device, follow these steps:
 ### 1. Clone the repository.
 ```bash
-git clone https://github.com/kotkukotku/python-socket-chat.git
+git clone https://github.com/kotkukotku/erkchat.git
 ```
 ### 2. Navigate to the project directory.
 ```bash
-cd python-socket-chat
+cd erkchat
 ```
 ### 3. Start the server file through the first terminal. 
 ```bash
