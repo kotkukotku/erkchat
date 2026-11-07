@@ -2,21 +2,20 @@ from protocol import send_json
 import database
 
 DEFAULT_ROOM = "lobby"
+
 def send_room_history(conn, room_name):
-    old_messages = database.get_last_messages(limit=15, room=room_name)
-    if old_messages:
+    old_messages = database.get_last_messages(
+        limit=15,
+        room=room_name
+    )
+
+    for sender, message, receiver, saat, room in old_messages:
         send_json(conn, {
-            "type": "system",
-            "text": f"\n-- #{room_name} GEÇMİŞ MESAJLARI --"
-        })
-        for sender, message, receiver, saat, room in old_messages:
-            send_json(conn, {
-                "type": "chat",
-                "text": f"[{saat}] [{room}] {sender}: {message}"
-            })
-        send_json(conn, {
-            "type": "system",
-            "text": "--------------------------------\n"
+            "type": "chat",
+            "username": sender,
+            "text": message,
+            "room": room,
+            "timestamp": saat
         })
 
 def handle_nick(conn, new_name, nicknames, lock, broadcast):
@@ -59,23 +58,34 @@ def handle_nick(conn, new_name, nicknames, lock, broadcast):
         else:
             send_json(conn,{"type":"system",
             "text":"Bu kullanıcı adı veritabanında kayıtlı.\n"})
+
 def handle_users(conn, nicknames, lock, rooms=None, client_rooms=None):
     with lock:
         if rooms is None or client_rooms is None:
-            user_list = "\n".join(nicknames.values())
-            title = "Online users"
+            room_name = None
+            users = sorted(
+                set(nicknames.values()),
+                key=str.casefold
+            )
         else:
             room_name = client_rooms.get(conn, DEFAULT_ROOM)
+
             room_clients = rooms.get(room_name, set())
-            user_list = "\n".join(
-                nicknames.get(client, "Unknown") for client in room_clients
+
+            users = sorted(
+                {
+                    nicknames.get(client, "Unknown")
+                    for client in room_clients
+                },
+                key=str.casefold
             )
-            title = f"Online users in #{room_name}"
-        users_msg = {
-            "type": "system",
-            "text": f"{title}:\n{user_list}\n",
-        }
-    send_json(conn,users_msg)
+
+    send_json(conn, {
+        "type": "users",
+        "room": room_name,
+        "users": users
+    })
+
 
 def handle_rooms(conn, rooms, client_rooms, lock):
     with lock:
@@ -91,20 +101,31 @@ def handle_rooms(conn, rooms, client_rooms, lock):
         "text": "Odalar:\n" + "\n".join(room_lines) + "\n",
     })
 
-def handle_join(conn, room_name, nicknames, rooms, client_rooms, lock, broadcast_room):
+
+def handle_join(
+    conn,
+    room_name,
+    nicknames,
+    rooms,
+    client_rooms,
+    lock,
+    broadcast_room
+):
     new_room = room_name.strip()
 
     if not new_room:
         send_json(conn, {
             "type": "system",
-            "text": "Oda adı boş olamaz.\n",
+            "event": "room_change_failed",
+            "text": "Oda adı boş olamaz."
         })
         return
 
     if " " in new_room or len(new_room) > 30:
         send_json(conn, {
             "type": "system",
-            "text": "Oda adı boşluk içeremez ve 30 karakterden uzun olamaz.\n",
+            "event": "room_change_failed",
+            "text": "Oda adı boşluk içeremez ve 30 karakterden uzun olamaz."
         })
         return
 
@@ -115,13 +136,16 @@ def handle_join(conn, room_name, nicknames, rooms, client_rooms, lock, broadcast
         if old_room == new_room:
             send_json(conn, {
                 "type": "system",
-                "text": f"Zaten #{new_room} odasındasınız.\n",
+                "event": "room_change_failed",
+                "text": f"Zaten #{new_room} odasındasınız."
             })
             return
 
         database.add_room(new_room)
+
         if old_room in rooms:
             rooms[old_room].discard(conn)
+
             if old_room != DEFAULT_ROOM and not rooms[old_room]:
                 rooms.pop(old_room, None)
 
@@ -130,18 +154,27 @@ def handle_join(conn, room_name, nicknames, rooms, client_rooms, lock, broadcast
 
     broadcast_room(old_room, {
         "type": "system",
-        "text": f"{username} #{old_room} odasından ayrıldı.",
+        "event": "member_left",
+        "username": username,
+        "room": old_room
     }, conn)
+
     broadcast_room(new_room, {
         "type": "system",
-        "text": f"{username} #{new_room} odasına katıldı.",
+        "event": "member_joined",
+        "username": username,
+        "room": new_room
     }, conn)
+
+    # Oda değişikliğini yalnızca ilgili kullanıcıya bildir.
     send_json(conn, {
         "type": "system",
-        "text": f"#{new_room} odasına geçtiniz.\n",
+        "event": "room_changed",
+        "room": new_room
     })
 
     send_room_history(conn, new_room)
+
 def handle_room(conn, client_rooms, lock):
     with lock:
         room_name = client_rooms.get(conn, DEFAULT_ROOM)
@@ -152,7 +185,15 @@ def handle_room(conn, client_rooms, lock):
     })
 
 
-def handle_leave(conn, nicknames, rooms, client_rooms, lock, broadcast_room):
+
+def handle_leave(
+    conn,
+    nicknames,
+    rooms,
+    client_rooms,
+    lock,
+    broadcast_room
+):
     with lock:
         username = nicknames.get(conn, "Unknown")
         old_room = client_rooms.get(conn, DEFAULT_ROOM)
@@ -160,12 +201,13 @@ def handle_leave(conn, nicknames, rooms, client_rooms, lock, broadcast_room):
         if old_room == DEFAULT_ROOM:
             send_json(conn, {
                 "type": "system",
-                "text": "Zaten lobby odasındasınız.\n",
+                "text": "Zaten lobby odasındasınız."
             })
             return
 
         if old_room in rooms:
             rooms[old_room].discard(conn)
+
             if not rooms[old_room]:
                 rooms.pop(old_room, None)
 
@@ -174,19 +216,26 @@ def handle_leave(conn, nicknames, rooms, client_rooms, lock, broadcast_room):
 
     broadcast_room(old_room, {
         "type": "system",
-        "text": f"{username} #{old_room} odasından ayrıldı.",
+        "event": "member_left",
+        "username": username,
+        "room": old_room
     }, conn)
 
     broadcast_room(DEFAULT_ROOM, {
         "type": "system",
-        "text": f"{username} #{DEFAULT_ROOM} odasına katıldı.",
+        "event": "member_joined",
+        "username": username,
+        "room": DEFAULT_ROOM
     }, conn)
 
     send_json(conn, {
         "type": "system",
-        "text": f"#{DEFAULT_ROOM} odasına döndünüz.\n",
+        "event": "room_changed",
+        "room": DEFAULT_ROOM
     })
+
     send_room_history(conn, DEFAULT_ROOM)
+
 def handle_help(conn):
     help_text = (
         "\nKomutlar:\n"

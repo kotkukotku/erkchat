@@ -47,7 +47,9 @@ Usage: /join {NEW-ROOM}
 
 ### 6. It has a room system. You can join a new room and chat to it.
 
-### 7. It runs from the terminal (for now).
+### 7. It runs from the GUI. (New added)
+
+### 8. There are avatars in user profiles.
 
 ## Setup
 To run the project on your own device, follow these steps:
@@ -65,7 +67,7 @@ python server.py
 ```
 ### 4. Open the second terminal and start the client file by following steps 2 and 3. 
 ```bash
-python client.py
+python gui/main.py
 ```
 ## Note
 This project is still under development. I make it for learning.

@@ -91,13 +91,15 @@ def receive(conn, addr):
         clients.append(conn)
         user_ids[conn] = user_id
 
-        default_room = "lobby"
+        default_room = "genel"
         rooms.setdefault(default_room, set()).add(conn)
         client_rooms[conn] = default_room
     broadcast_room(default_room, {
     "type": "system",
-    "text": f"{current_nick} bağlandı."
-    }, conn)       
+    "event": "member_joined",
+    "username": current_nick,
+    "room": default_room
+    }, conn)    
     
     commands.send_room_history(conn, default_room)
     while True:
@@ -113,7 +115,9 @@ def receive(conn, addr):
             if nickname:
                 broadcast_room(room_name, {
                     "type": "system",
-                    "text": f"{nickname} ayrıldı.",
+                    "event": "member_left",
+                    "username": nickname,
+                    "room": room_name
                 }, conn)
             break
 
@@ -140,7 +144,9 @@ def receive(conn, addr):
             room_name = get_room(conn)
             broadcast_room(room_name, {
                 "type": "system",
-                "text": f"{nickname} ayrıldı.",
+                "event": "member_left",
+                "username": nickname,
+                "room": room_name
             }, conn)
             shut_msg = {
                 "type": "system",
