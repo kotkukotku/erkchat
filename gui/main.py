@@ -1,17 +1,14 @@
 
 import sys
 
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QListWidget,
     QMainWindow,
-    QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
     QInputDialog,
