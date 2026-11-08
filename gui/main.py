@@ -41,6 +41,7 @@ class ErkChatWindow(QMainWindow):
         self.auth_dialog = None
         self.pending_auth_action = None
         self.pending_room = None
+        self.pending_username = None
 
         self.room_change_timer = QTimer(self)
         self.room_change_timer.setSingleShot(True)
@@ -178,7 +179,7 @@ class ErkChatWindow(QMainWindow):
         layout.addWidget(self.room_list)
         layout.addStretch()
 
-        profile = QLabel("●  Erkam\n    Çevrimiçi")
+        profile = QLabel(f"●  Erkam\n    Çevrimiçi")
         profile.setStyleSheet(
             "background-color: #292a30; padding: 12px; "
             "border-radius: 8px;"
@@ -322,7 +323,7 @@ class ErkChatWindow(QMainWindow):
         self.auth_dialog.show()
     def authenticate_user(self, action, username, password):
         self.pending_auth_action = action
-
+        self.pending_username = username
         success = self.network.authenticate(
             action,
             username,
@@ -361,6 +362,7 @@ class ErkChatWindow(QMainWindow):
 
             # Giriş başarılı.
             self.authenticated = True
+            self.sidebar.set_username(self.pending_username)
 
             self.auth_dialog.accept()
             self.auth_dialog = None
